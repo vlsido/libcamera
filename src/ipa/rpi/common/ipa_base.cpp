@@ -678,6 +678,7 @@ static const std::map<int32_t, std::string> HdrModeTable = {
 	{ controls::HdrModeMultiExposureUnmerged, "MultiExposureUnmerged" },
 	{ controls::HdrModeMultiExposure, "MultiExposure" },
 	{ controls::HdrModeSingleExposure, "SingleExposure" },
+	{ controls::HdrModeNight, "Night" },
 };
 
 void IpaBase::applyControls(const ControlList &controls)
