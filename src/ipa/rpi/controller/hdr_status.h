@@ -1,13 +1,19 @@
 /* SPDX-License-Identifier: BSD-2-Clause */
 /*
- * Copyright (C) 2022 Raspberry Pi Ltd
+ * Copyright (C) 2023 Raspberry Pi Ltd
  *
  * hdr_status.h - HDR control algorithm status
  */
 #pragma once
 
+#include <string>
+
+/*
+ * The HDR algorithm process method should post an HdrStatus into the image
+ * metadata under the tag "hdr.status".
+ */
+
 struct HdrStatus {
-	uint16_t thresholdLo;
-	uint8_t diffPower;
-	double motionThreshold;
+	std::string mode;
+	std::string channel;
 };

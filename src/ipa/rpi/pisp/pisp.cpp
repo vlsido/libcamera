@@ -768,7 +768,7 @@ void IpaPiSP::applySharpen(const SharpenStatus *sharpenStatus,
 			      PISP_BE_RGB_ENABLE_YCBCR_INVERSE;
 }
 
-void IpaPiSP::applyHdr(const HdrStatus *hdrStatus, const DeviceStatus *deviceStatus,
+void IpaPiSP::applyHdr([[maybe_unused]] const HdrStatus *hdrStatus, const DeviceStatus *deviceStatus,
 		       pisp_be_global_config &global)
 {
 	utils::Duration exposure = deviceStatus->shutterSpeed * deviceStatus->analogueGain;
@@ -789,9 +789,10 @@ void IpaPiSP::applyHdr(const HdrStatus *hdrStatus, const DeviceStatus *deviceSta
 	stitch.exposure_ratio = clampField(ratio, 15, 15);
 	if (phaseLong)
 		stitch.exposure_ratio |= PISP_BE_STITCH_STREAMING_LONG;
-	stitch.threshold_lo = clampField(hdrStatus->thresholdLo, 16);
-	stitch.threshold_diff_power = clampField(hdrStatus->diffPower, 4);
-	stitch.motion_threshold_256 = clampField(hdrStatus->motionThreshold, 8, 8);
+	/* These will be filled in correctly once we have implemented the HDR algorithm. */
+	stitch.threshold_lo = 0;
+	stitch.threshold_diff_power = 0;
+	stitch.motion_threshold_256 = 0;
 
 	global.bayer_enables |= PISP_BE_BAYER_ENABLE_STITCH_OUTPUT;
 	/* Only enable the HDR Input/Calculate after a state reset. */

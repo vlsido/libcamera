@@ -19,6 +19,7 @@ rpi_ipa_controller_sources = files([
     'rpi/dpc.cpp',
     'rpi/geq.cpp',
     'rpi/hdr.cpp',
+    'rpi/hdr.cpp',
     'rpi/lux.cpp',
     'rpi/noise.cpp',
     'rpi/saturation.cpp',

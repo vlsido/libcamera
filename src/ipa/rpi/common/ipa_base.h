@@ -22,6 +22,7 @@
 #include "controller/agc_status.h"
 #include "controller/camera_mode.h"
 #include "controller/controller.h"
+#include "controller/hdr_status.h"
 #include "controller/metadata.h"
 
 namespace libcamera {
@@ -123,6 +124,9 @@ private:
 		int32_t mode;
 		utils::Duration manualPeriod;
 	} flickerState_;
+
+	/* Remember the HDR status after a mode switch. */
+	HdrStatus hdrStatus_;
 };
 
 } /* namespace ipa::RPi */
