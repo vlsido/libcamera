@@ -41,25 +41,70 @@
         {
             "rpi.denoise":
             {
-                "sdn":
-                {
-                    "deviation": 1.6,
-                    "strength": 0.5,
-                    "deviation2": 3.2,
-                    "deviation_no_tdn": 3.2,
-                    "strength_no_tdn": 0.75
-                },
-                "cdn":
-                {
-                    "deviation": 200,
-                    "strength": 0.3
-                },
-                "tdn":
-                {
-                    "deviation": 0.8,
-                    "threshold": 0.05
-                }
-            }
+		"normal":
+		{
+                    "sdn":
+                    {
+			"deviation": 1.6,
+			"strength": 0.5,
+			"deviation2": 3.2,
+			"deviation_no_tdn": 3.2,
+			"strength_no_tdn": 0.75
+                    },
+                    "cdn":
+                    {
+			"deviation": 200,
+			"strength": 0.3
+                    },
+                    "tdn":
+                    {
+			"deviation": 0.8,
+			"threshold": 0.05
+                    }
+		},
+		"hdr":
+		{
+                    "sdn":
+                    {
+			"deviation": 1.6,
+			"strength": 0.5,
+			"deviation2": 3.2,
+			"deviation_no_tdn": 3.2,
+			"strength_no_tdn": 0.75
+                    },
+                    "cdn":
+                    {
+			"deviation": 200,
+			"strength": 0.3
+                    },
+                    "tdn":
+                    {
+			"deviation": 1.3,
+			"threshold": 0.1
+                    }
+		},
+		"night":
+		{
+                    "sdn":
+                    {
+			"deviation": 1.6,
+			"strength": 0.5,
+			"deviation2": 3.2,
+			"deviation_no_tdn": 3.2,
+			"strength_no_tdn": 0.75
+                    },
+                    "cdn":
+                    {
+			"deviation": 200,
+			"strength": 0.3
+                    },
+                    "tdn":
+                    {
+			"deviation": 1.3,
+			"threshold": 0.1
+                    }
+		}
+	    }
         },
         {
             "rpi.awb":
