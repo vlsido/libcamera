@@ -10,6 +10,7 @@
 #include <libcamera/base/log.h>
 
 #include "../agc_status.h"
+#include "../stitch_status.h"
 #include "../tonemap_status.h"
 
 using namespace RPiController;
@@ -59,6 +60,14 @@ void HdrConfig::read(const libcamera::YamlObject &params, const std::string &mod
 			speed = params["speed"].get<double>(0.5);
 		}
 	}
+
+	/* Read any stitch parameters. */
+	stitchEnable = params["stitch_enable"].get<int>(0);
+	thresholdLo = params["threshold_lo"].get<uint16_t>(50000);
+	motionThreshold = params["motion_threshold"].get<double>(0.005);
+	diffPower = params["diff_power"].get<uint8_t>(13);
+	if (diffPower > 15)
+		LOG(RPiHdr, Fatal) << "Bad diff_power value in HDR mode " << name;
 }
 
 Hdr::Hdr(Controller *controller)
@@ -239,6 +248,17 @@ void Hdr::process(StatisticsPtr &stats, Metadata *imageMetadata)
 		tonemapStatus.tonemap = tonemap_;
 
 		imageMetadata->set("tonemap.status", tonemapStatus);
+	}
+
+	if (config.stitchEnable) {
+		/* Add stitch.status metadata. */
+		StitchStatus stitchStatus;
+
+		stitchStatus.diffPower = config.diffPower;
+		stitchStatus.motionThreshold = config.motionThreshold;
+		stitchStatus.thresholdLo = config.thresholdLo;
+
+		imageMetadata->set("stitch.status", stitchStatus);
 	}
 }
 

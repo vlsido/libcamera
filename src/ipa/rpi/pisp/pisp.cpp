@@ -39,6 +39,7 @@
 #include "controller/pwl.h"
 #include "controller/saturation_status.h"
 #include "controller/sharpen_status.h"
+#include "controller/stitch_status.h"
 #include "controller/tonemap_status.h"
 
 using namespace std::literals::chrono_literals;
@@ -240,8 +241,8 @@ private:
 			     pisp_be_global_config &global);
 	void applySharpen(const SharpenStatus *sharpenStatus,
 			  pisp_be_global_config &global);
-	void applyHdr(const HdrStatus *hdrStatus, const DeviceStatus *deviceStatus,
-		      pisp_be_global_config &global);
+	bool applyStitch(const StitchStatus *stitchStatus, const DeviceStatus *deviceStatus,
+			 const AgcStatus *agcStatus, pisp_be_global_config &global);
 	void applyTonemap(const TonemapStatus *tonemapStatus,
 			  pisp_be_global_config &global);
 	void applyFocusStats(const NoiseStatus *noiseStatus);
@@ -258,8 +259,9 @@ private:
 
 	/* TDN/HDR runtime need the following state. */
 	bool tdnReset_;
-	bool hdrReset_;
 	utils::Duration lastExposure_;
+	std::map<std::string, utils::Duration> lastStitchExposures_;
+	HdrStatus lastStitchHdrStatus_;
 };
 
 int32_t IpaPiSP::platformInit(const InitParams &params,
@@ -303,7 +305,9 @@ int32_t IpaPiSP::platformStart([[maybe_unused]] const ControlList &controls,
 			       [[maybe_unused]] StartResult *result)
 {
 	tdnReset_ = true;
-	hdrReset_ = true;
+
+	/* Cause the stitch block to be reset correctly. */
+	lastStitchHdrStatus_ = HdrStatus();
 
 	return 0;
 }
@@ -400,9 +404,17 @@ void IpaPiSP::platformPrepareIsp([[maybe_unused]] const PrepareParams &params,
 	if (sharpenStatus)
 		applySharpen(sharpenStatus, global);
 
-	HdrStatus *hdrStatus = rpiMetadata.getLocked<HdrStatus>("hdr.status");
-	if (hdrStatus && deviceStatus)
-		applyHdr(hdrStatus, deviceStatus, global);
+	StitchStatus *stitchStatus = rpiMetadata.getLocked<StitchStatus>("stitch.status");
+	if (stitchStatus) {
+		/*
+		 * Note that it's the *delayed* AGC status that contains the HDR mode/channel
+		 * info that pertains to this frame!
+		 */
+		AgcStatus *agcStatus = rpiMetadata.getLocked<AgcStatus>("agc.delayed_status");
+		/* prepareIsp() will fetch this value. Maybe pass it back differently? */
+		stitchSwapBuffers_ = applyStitch(stitchStatus, deviceStatus, agcStatus, global);
+	} else
+		lastStitchHdrStatus_ = HdrStatus();
 
 	TonemapStatus *tonemapStatus = rpiMetadata.getLocked<TonemapStatus>("tonemap.status");
 	if (tonemapStatus)
@@ -768,40 +780,65 @@ void IpaPiSP::applySharpen(const SharpenStatus *sharpenStatus,
 			      PISP_BE_RGB_ENABLE_YCBCR_INVERSE;
 }
 
-void IpaPiSP::applyHdr([[maybe_unused]] const HdrStatus *hdrStatus, const DeviceStatus *deviceStatus,
-		       pisp_be_global_config &global)
+bool IpaPiSP::applyStitch(const StitchStatus *stitchStatus, const DeviceStatus *deviceStatus,
+			  const AgcStatus *agcStatus, pisp_be_global_config &global)
 {
+	/*
+	 * Find out what HDR mode/channel this frame is. Normally this will be in the delayed
+	 * HDR status (in the AGC status), though after a mode switch this will be absent and
+	 * the information will have been stored in the hdrStatus_ field.
+	 */
+	const HdrStatus *hdrStatus = &hdrStatus_;
+	if (agcStatus)
+		hdrStatus = &agcStatus->hdr;
+
+	bool modeChange = hdrStatus->mode != lastStitchHdrStatus_.mode;
+	bool channelChange = !modeChange && hdrStatus->channel != lastStitchHdrStatus_.channel;
+	lastStitchHdrStatus_ = *hdrStatus;
+
+	/* Check for a change of HDR mode. That forces us to start over. */
+	if (modeChange)
+		lastStitchExposures_.clear();
+
+	if (hdrStatus->channel != "short" && hdrStatus->channel != "long") {
+		/* The channel *must* be long or short, anything else does not make sense. */
+		LOG(IPARPI, Warning) << "Stitch channel is not long or short";
+		return false;
+	}
+
+	/* Whatever happens, we're going to output this buffer now. */
+	global.bayer_enables |= PISP_BE_BAYER_ENABLE_STITCH_OUTPUT;
+
 	utils::Duration exposure = deviceStatus->shutterSpeed * deviceStatus->analogueGain;
+	lastStitchExposures_[hdrStatus->channel] = exposure;
+
+	/* If the other channel hasn't been seen there's nothing more we can do. */
+	std::string otherChannel = hdrStatus->channel == "short" ? "long" : "short";
+	if (lastStitchExposures_.find(otherChannel) == lastStitchExposures_.end()) {
+		/* The first channel should be "short". */
+		if (hdrStatus->channel != "short")
+			LOG(IPARPI, Warning) << "First frame is not short";
+		return false;
+	}
+
+	/* We have both channels, we need to enable stitching. */
+	global.bayer_enables |= PISP_BE_BAYER_ENABLE_STITCH_INPUT + PISP_BE_BAYER_ENABLE_STITCH;
+
+	utils::Duration otherExposure = lastStitchExposures_[otherChannel];
+	bool phaseLong = hdrStatus->channel == "long";
+	double ratio = phaseLong ? otherExposure / exposure : exposure / otherExposure;
+
 	pisp_be_stitch_config stitch = {};
-
-	/* We need to start on the short phase. */
-	if (hdrReset_ && (lastExposure_ == 0s || exposure >= lastExposure_))
-		return;
-
-	bool phaseLong = exposure > lastExposure_;
-	double ratio = phaseLong ? lastExposure_ / exposure : exposure / lastExposure_;
-
-	LOG(IPARPI, Debug) << "HDR: exposure: " << exposure
-			   << " last: " << lastExposure_
-			   << " ratio: " << ratio
-			   << " L-phase: " << phaseLong;
-
 	stitch.exposure_ratio = clampField(ratio, 15, 15);
 	if (phaseLong)
 		stitch.exposure_ratio |= PISP_BE_STITCH_STREAMING_LONG;
 	/* These will be filled in correctly once we have implemented the HDR algorithm. */
-	stitch.threshold_lo = 0;
-	stitch.threshold_diff_power = 0;
-	stitch.motion_threshold_256 = 0;
-
-	global.bayer_enables |= PISP_BE_BAYER_ENABLE_STITCH_OUTPUT;
-	/* Only enable the HDR Input/Calculate after a state reset. */
-	if (!hdrReset_)
-		global.bayer_enables |= PISP_BE_BAYER_ENABLE_STITCH_INPUT +
-					PISP_BE_BAYER_ENABLE_STITCH;
-
+	stitch.threshold_lo = stitchStatus->thresholdLo;
+	stitch.threshold_diff_power = stitchStatus->diffPower;
+	stitch.motion_threshold_256 = stitchStatus->motionThreshold;
 	be_->SetStitch(stitch);
-	hdrReset_ = false;
+
+	return channelChange;
 }
 
 void IpaPiSP::applyTonemap(const TonemapStatus *tonemapStatus, pisp_be_global_config &global)

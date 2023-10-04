@@ -38,6 +38,12 @@ struct HdrConfig {
 	double step; /* the histogram granularity for building the mapping */
 	double speed; /* rate at which tonemap is updated */
 
+	/* Stitch related parameters. */
+	bool stitchEnable;
+	uint16_t thresholdLo;
+	uint8_t diffPower;
+	double motionThreshold;
+
 	void read(const libcamera::YamlObject &params, const std::string &name);
 };
 

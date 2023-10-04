@@ -103,7 +103,8 @@ namespace ipa::RPi {
 
 IpaBase::IpaBase()
 	: controller_(), frameLengths_(FrameLengthsQueueSize, 0s), frameCount_(0),
-	  mistrustCount_(0), lastRunTimestamp_(0), firstStart_(true), flickerState_({ 0, 0s })
+	  mistrustCount_(0), lastRunTimestamp_(0), firstStart_(true), flickerState_({ 0, 0s }),
+	  stitchSwapBuffers_(false)
 {
 }
 
@@ -459,7 +460,7 @@ void IpaBase::prepareIsp(const PrepareParams &params)
 		reportMetadata(ipaContext);
 
 	/* Ready to push the input buffer into the ISP. */
-	prepareIspComplete.emit(params.buffers);
+	prepareIspComplete.emit(params.buffers, stitchSwapBuffers_);
 }
 
 void IpaBase::processStats(const ProcessParams &params)

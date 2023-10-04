@@ -125,8 +125,12 @@ private:
 		utils::Duration manualPeriod;
 	} flickerState_;
 
+protected:
 	/* Remember the HDR status after a mode switch. */
 	HdrStatus hdrStatus_;
+
+	/* Whether the stitch block (if available) needs to swap buffers. */
+	bool stitchSwapBuffers_;
 };
 
 } /* namespace ipa::RPi */

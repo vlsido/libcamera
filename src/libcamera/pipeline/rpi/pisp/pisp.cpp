@@ -658,7 +658,7 @@ public:
 	void beOutputDequeue(FrameBuffer *buffer);
 
 	void processStatsComplete(const ipa::RPi::BufferIds &buffers);
-	void prepareIspComplete(const ipa::RPi::BufferIds &buffers);
+	void prepareIspComplete(const ipa::RPi::BufferIds &buffers, bool stitchSwapBuffers);
 	void setCameraTimeout(uint32_t maxFrameLengthMs);
 
 	/* Array of CFE and ISP device streams and associated buffers/streams. */
@@ -735,7 +735,7 @@ private:
 	void platformSetIspCrop() override;
 
 	void prepareCfe();
-	void prepareBe(uint32_t bufferId);
+	void prepareBe(uint32_t bufferId, bool stitchSwapBuffers);
 
 	void tryRunPipeline() override;
 
@@ -1753,7 +1753,7 @@ void PiSPCameraData::setCameraTimeout(uint32_t maxFrameLengthMs)
 	cfe_[Cfe::Output0].dev()->setDequeueTimeout(timeout);
 }
 
-void PiSPCameraData::prepareIspComplete(const ipa::RPi::BufferIds &buffers)
+void PiSPCameraData::prepareIspComplete(const ipa::RPi::BufferIds &buffers, bool stitchSwapBuffers)
 {
 	unsigned int embeddedId = buffers.embedded & RPi::MaskID;
 	unsigned int bayerId = buffers.bayer & RPi::MaskID;
@@ -1776,7 +1776,7 @@ void PiSPCameraData::prepareIspComplete(const ipa::RPi::BufferIds &buffers)
 		buffer = cfe_[Cfe::Output0].getBuffers().at(bayerId).buffer;
 		handleStreamBuffer(buffer, &cfe_[Cfe::Output0]);
 	} else
-		prepareBe(bayerId);
+		prepareBe(bayerId, stitchSwapBuffers);
 
 	state_ = State::IpaComplete;
 	handleState();
@@ -2105,7 +2105,7 @@ void PiSPCameraData::prepareCfe()
 	cfe_[Cfe::Config].queueBuffer(config.buffer);
 }
 
-void PiSPCameraData::prepareBe(uint32_t bufferId)
+void PiSPCameraData::prepareBe(uint32_t bufferId, bool stitchSwapBuffers)
 {
 	ispOutputCount_ = 0;
 
@@ -2124,9 +2124,10 @@ void PiSPCameraData::prepareBe(uint32_t bufferId)
 	}
 
 	if (!config_.disableHdr) {
+		if (stitchSwapBuffers)
+			stitchInputIndex_ ^= 1;
 		isp_[Isp::StitchInput].queueBuffer(stitchBuffers_[stitchInputIndex_]);
 		isp_[Isp::StitchOutput].queueBuffer(stitchBuffers_[stitchInputIndex_ ^ 1]);
-		stitchInputIndex_ ^= 1;
 	}
 
 	/* Fetch an unused config buffer from the stream .*/
