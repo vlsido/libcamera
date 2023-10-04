@@ -692,6 +692,7 @@ void IpaBase::applyControls(const ControlList &controls)
 	using RPiController::AgcAlgorithm;
 	using RPiController::AfAlgorithm;
 	using RPiController::ContrastAlgorithm;
+	using RPiController::DenoiseAlgorithm;
 	using RPiController::HdrAlgorithm;
 
 	/* Clear the return metadata buffer. */
@@ -1219,6 +1220,19 @@ void IpaBase::applyControls(const ControlList &controls)
 						contrast->restoreCe();
 					else
 						contrast->enableCe(false);
+				}
+
+				DenoiseAlgorithm *denoise =
+					dynamic_cast<DenoiseAlgorithm *>(controller_.getAlgorithm("denoise"));
+				if (denoise) {
+					/* \todo - make the HDR mode say what denoise it wants? */
+					if (mode->second == "Night")
+						denoise->setConfig("night");
+					else if (mode->second == "SingleExposure")
+						denoise->setConfig("hdr");
+					/* MultiExposure doesn't need extra extra denoise. */
+					else
+						denoise->setConfig("normal");
 				}
 			} else
 				LOG(IPARPI, Warning)
