@@ -401,11 +401,17 @@ void IpaBase::prepareIsp(const PrepareParams &params)
 	 * sensor exposure/gain changes. So fetch it from the metadata list
 	 * indexed by the IPA cookie returned, and put it in the current frame
 	 * metadata.
+	 *
+	 * Note if the HDR mode has changed, as things like tonemaps may need updating.
 	 */
 	AgcStatus agcStatus;
+	bool hdrChange = false;
 	RPiController::Metadata &delayedMetadata = rpiMetadata_[params.delayContext];
-	if (!delayedMetadata.get<AgcStatus>("agc.status", agcStatus))
+	if (!delayedMetadata.get<AgcStatus>("agc.status", agcStatus)) {
 		rpiMetadata.set("agc.delayed_status", agcStatus);
+		hdrChange = agcStatus.hdr.mode != hdrStatus_.mode;
+		hdrStatus_ = agcStatus.hdr;
+	}
 
 	/*
 	 * This may overwrite the DeviceStatus using values from the sensor
@@ -416,7 +422,7 @@ void IpaBase::prepareIsp(const PrepareParams &params)
 	/* Allow a 10% margin on the comparison below. */
 	Duration delta = (frameTimestamp - lastRunTimestamp_) * 1.0ns;
 	if (lastRunTimestamp_ && frameCount_ > dropFrameCount_ &&
-	    delta < controllerMinFrameDuration * 0.9) {
+	    delta < controllerMinFrameDuration * 0.9 && !hdrChange) {
 		/*
 		 * Ensure we merge the previous frame's metadata with the current
 		 * frame. This will not overwrite exposure/gain values for the
