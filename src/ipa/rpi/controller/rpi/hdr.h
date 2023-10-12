@@ -36,6 +36,12 @@ struct HdrConfig {
 	double iirStrength;
 	double strength;
 	Pwl tonemap;
+	/* These relate to adaptive tonemap calculation. */
+	double speed;
+	std::vector<double> quantileTargets; /* target values for histogram quantiles */
+	double powerMin; /* minimum tonemap power */
+	double powerMax; /* maximum tonemap power */
+	std::vector<double> contrastAdjustments; /* any contrast adjustment factors */
 
 	/* Stitch related parameters. */
 	bool stitchEnable;
