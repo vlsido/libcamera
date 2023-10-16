@@ -87,8 +87,8 @@
                 {
                     "sdn":
                     {
-                        "deviation": 1.6,
-                        "strength": 0.5,
+                        "deviation": 3.2,
+                        "strength": 0.75,
                         "deviation2": 3.2,
                         "deviation_no_tdn": 3.2,
                         "strength_no_tdn": 0.75
@@ -1011,13 +1011,7 @@
                 {
                     "cadence": [1],
                     "channel_map": { "short": 1 },
-                    "spatial_gain":
-                    [
-                        0.0, 2.5,
-                        0.01, 2.5,
-                        0.06, 1.0,
-                        1.0, 1.0
-                    ],
+                    "spatial_gain": 2.0,
                     "tonemap_enable": 1
                 },
                 "MultiExposure":
@@ -1025,13 +1019,7 @@
                     "cadence": [1, 2],
                     "channel_map": { "short": 1, "long": 2 },
                     "stitch_enable": 1,
-                    "spatial_gain":
-                    [
-                        0.0, 2.5,
-                        0.01, 2.5,
-                        0.06, 1.0,
-                        1.0, 1.0
-                    ],
+                    "spatial_gain": 2.0,
                     "tonemap_enable": 1
                 },
                 "Night":

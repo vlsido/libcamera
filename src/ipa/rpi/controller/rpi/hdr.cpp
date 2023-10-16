@@ -41,15 +41,22 @@ void HdrConfig::read(const libcamera::YamlObject &params, const std::string &mod
 		channelMap[v.get<unsigned int>().value()] = k;
 
 	/* Lens shading related parameters. */
-	if (params.contains("spatial_gain")) {
-		spatialGain.read(params["spatial_gain"]);
-		diffusion = params["diffusion"].get<unsigned int>(3);
-		/* Clip to an arbitrary limit just to stop typos from killing the system! */
-		const unsigned int MAX_DIFFUSION = 15;
-		if (diffusion > MAX_DIFFUSION) {
-			diffusion = MAX_DIFFUSION;
-			LOG(RPiHdr, Warning) << "Diffusion value clipped to " << MAX_DIFFUSION;
-		}
+	if (params.contains("spatial_gain_curve")) {
+		spatialGainCurve.read(params["spatial_gain_curve"]);
+	} else if (params.contains("spatial_gain")) {
+		double spatialGain = params["spatial_gain"].get<double>(2.0);
+		spatialGainCurve.append(0.0, spatialGain);
+		spatialGainCurve.append(0.01, spatialGain);
+		spatialGainCurve.append(0.06, 1.0); /* maybe make this programmable? */
+		spatialGainCurve.append(1.0, 1.0);
+	}
+
+	diffusion = params["diffusion"].get<unsigned int>(3);
+	/* Clip to an arbitrary limit just to stop typos from killing the system! */
+	const unsigned int MAX_DIFFUSION = 15;
+	if (diffusion > MAX_DIFFUSION) {
+		diffusion = MAX_DIFFUSION;
+		LOG(RPiHdr, Warning) << "Diffusion value clipped to " << MAX_DIFFUSION;
 	}
 
 	/* Read any tonemap parameters. */
@@ -67,8 +74,8 @@ void HdrConfig::read(const libcamera::YamlObject &params, const std::string &mod
 		if (quantileTargets.empty() || quantileTargets.size() % 2)
 			LOG(RPiHdr, Fatal) << "quantile_targets much be even and non-empty";
 	} else
-		quantileTargets = { 0.5, 0.05, 1.0, 0.15 };
-	powerMin = params["power_min"].get<double>(0.55);
+		quantileTargets = { 0.5, 0.04, 1.0, 0.15 };
+	powerMin = params["power_min"].get<double>(0.65);
 	powerMax = params["power_max"].get<double>(1.0);
 	if (params.contains("contrast_adjustments")) {
 		contrastAdjustments = params["contrast_adjustments"].getList<double>().value();
@@ -175,7 +182,7 @@ void Hdr::prepare(Metadata *imageMetadata)
 	}
 
 	HdrConfig &config = it->second;
-	if (config.spatialGain.empty())
+	if (config.spatialGainCurve.empty())
 		return;
 
 	AlscStatus alscStatus{}; /* some compilers seem to require the braces */
@@ -299,7 +306,7 @@ static void averageGains(std::vector<double> &src, std::vector<double> &dst, con
 
 void Hdr::updateGains(StatisticsPtr &stats, HdrConfig &config)
 {
-	if (config.spatialGain.empty())
+	if (config.spatialGainCurve.empty())
 		return;
 
 	/* When alternating exposures, only compute these gains for the short frame. */
@@ -314,7 +321,7 @@ void Hdr::updateGains(StatisticsPtr &stats, HdrConfig &config)
 		double g = region.val.gSum / counted;
 		double b = region.val.bSum / counted;
 		double brightness = std::max({ r, g, b }) / 65535;
-		gains_[0][i] = config.spatialGain.eval(brightness);
+		gains_[0][i] = config.spatialGainCurve.eval(brightness);
 	}
 
 	/* Ping-pong between the two gains_ buffers. */

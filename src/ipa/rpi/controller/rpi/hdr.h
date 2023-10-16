@@ -26,7 +26,7 @@ struct HdrConfig {
 	std::map<unsigned int, std::string> channelMap;
 
 	/* Lens shading related parameters. */
-	Pwl spatialGain; /* Brightness to gain curve for different image regions. */
+	Pwl spatialGainCurve; /* Brightness to gain curve for different image regions. */
 	unsigned int diffusion; /* How much to diffuse the gain spatially. */
 
 	/* Tonemap related parameters. */
