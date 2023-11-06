@@ -68,13 +68,19 @@ void HdrConfig::read(const libcamera::YamlObject &params, const std::string &mod
 	if (tonemapEnable)
 		tonemap.read(params["tonemap"]);
 	speed = params["speed"].get<double>(1.0);
-
+	if (params.contains("hi_quantile_targets")) {
+		hiQuantileTargets = params["hi_quantile_targets"].getList<double>().value();
+		if (hiQuantileTargets.empty() || hiQuantileTargets.size() % 2)
+			LOG(RPiHdr, Fatal) << "hi_quantile_targets much be even and non-empty";
+	} else
+		hiQuantileTargets = { 0.95, 0.65, 0.5, 0.28, 0.3, 0.25 };
+	hiQuantileMaxGain = params["hi_quantile_max_gain"].get<double>(1.6);
 	if (params.contains("quantile_targets")) {
 		quantileTargets = params["quantile_targets"].getList<double>().value();
 		if (quantileTargets.empty() || quantileTargets.size() % 2)
 			LOG(RPiHdr, Fatal) << "quantile_targets much be even and non-empty";
 	} else
-		quantileTargets = { 0.5, 0.04, 1.0, 0.15 };
+		quantileTargets = { 0.2, 0.03, 1.0, 0.15 };
 	powerMin = params["power_min"].get<double>(0.65);
 	powerMax = params["power_max"].get<double>(1.0);
 	if (params.contains("contrast_adjustments")) {
@@ -228,29 +234,52 @@ bool Hdr::updateTonemap([[maybe_unused]] StatisticsPtr &stats, HdrConfig &config
 		return true;
 
 	/*
-	 * Create a tonemap dynamically. We have a list of quantile/target pairs giving
-	 * the target value for each quantile we compute from the bottom of the histogram.
-	 * Go with the pair that implies the greatest gain.
+	 * Create a tonemap dynamically. We have three ingredients.
 	 *
-	 * We also have some optional contrast adjustments for the bottom of this curve,
-	 * because we know that power curves can start quite steeply and cause wash out.
+	 * 1. We have a list of "hi quantiles" and "targets". We use these to judge if
+	 * the image does seem to be reasonably saturated. If it isn't, we calculate
+	 * a gain that we will feed as a linear factor into the tonemap generation.
+	 * This prevents unsaturated images from beoming quite so "flat".
+	 *
+	 * 2. We have a list of quantile/target pairs for the bottom of the histogram.
+	 * We use these to calculate how much gain we must apply to the bottom of the
+	 * tonemap. We apply this gain as a power curve so as not to blow out the top
+	 * end.
+	 *
+	 * 3. Finally, when we generate the tonemap, we have some contrast adjustments
+	 * for the bottom because we know that power curves can start quite steeply and
+	 * cause a washed-out look.
 	 */
 
+	/* Compute the linear gain from the headroom for saturation at the top. */
+	double gain = 10; /* arbitrary, but hiQuantileMaxGain will clamp it later */
+	for (unsigned int i = 0; i < config.hiQuantileTargets.size(); i += 2) {
+		double quantile = config.hiQuantileTargets[i];
+		double target = config.hiQuantileTargets[i + 1];
+		double value = stats->yHist.interQuantileMean(quantile, 1.0) / 1024.0;
+		double newGain = target / (value + 0.01);
+		gain = std::min(gain, newGain);
+	}
+	gain = std::clamp(gain, 1.0, config.hiQuantileMaxGain);
+
+	/* Compute the power curve from the amount of gain needed at the bottom. */
 	double min_power = 2; /* arbitrary, but config.powerMax will clamp it later */
 	for (unsigned int i = 0; i < config.quantileTargets.size(); i += 2) {
 		double quantile = config.quantileTargets[i];
 		double target = config.quantileTargets[i + 1];
 		double value = stats->yHist.interQuantileMean(0, quantile) / 1024.0;
+		value = std::min(value * gain, 1.0);
 		double power = log(target + 1e-6) / log(value + 1e-6);
 		min_power = std::min(min_power, power);
 	}
 	double power = std::clamp(min_power, config.powerMin, config.powerMax);
 
+	/* Generate the tonemap, including the contrast adjustment factors. */
 	Pwl tonemap;
 	tonemap.append(0, 0);
 	for (unsigned int i = 0; i <= 6; i++) {
 		double x = 1 << (i + 9); /* x loops from 512 to 32768 inclusive */
-		double y = pow(x / 65536.0, power) * 65536;
+		double y = pow(std::min(x * gain, 65535.0) / 65536.0, power) * 65536;
 		if (i < config.contrastAdjustments.size())
 			y *= config.contrastAdjustments[i];
 		if (!tonemap_.empty())

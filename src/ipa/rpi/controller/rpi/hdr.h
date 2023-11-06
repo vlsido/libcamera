@@ -38,6 +38,8 @@ struct HdrConfig {
 	Pwl tonemap;
 	/* These relate to adaptive tonemap calculation. */
 	double speed;
+	std::vector<double> hiQuantileTargets; /* quantiles to check for unsaturated images */
+	double hiQuantileMaxGain; /* the max gain we'll apply when unsaturated */
 	std::vector<double> quantileTargets; /* target values for histogram quantiles */
 	double powerMin; /* minimum tonemap power */
 	double powerMax; /* maximum tonemap power */
